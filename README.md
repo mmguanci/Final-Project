@@ -1,6 +1,8 @@
 # Final-Project
 Big Data Class Final Project
 
+Files in this repo include my final paper, the R code I used along with a shorter write-up of the overall project and the raw data used 
+
 The data used is publically available from the Inter-American Tropical Tuna Commission and use in this project conforms with their stated use guidlines.
 
 The package GGOceanMap used to map the data requires additional data to be downloaded from:  install.packages("ggOceanMapsData", repos = c("https://mikkovihtakari.github.io/drat", "https://cloud.r-project.org")). If running my code in R ensure it is turned on, i;e line in functional. However turn it off (put # in front of line) if running in R markdown or it will not knit into a document. 
