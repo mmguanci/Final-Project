@@ -1,0 +1,320 @@
+---
+title: Comapring Eastern Pacific Yellowfin and Albacore Tuna Abundances Across Strong
+  El Nino and La Nina Years (Short Version)
+author: "Matt Guanci"
+date: "5/3/2022"
+output:
+  word_document: default
+  pdf_document: default
+---
+
+\newpage
+
+
+## Hypothesis 
+
+|     During strong El Nino years, warm water driven by stronger trade winds moves eastward across the Pacific towards the South American Coast. This movement of water both warms the equatorial and tropical wasters and lessens the characteristic upwelling found along the coast. This is due to the increased stratification between warm surface waters and cooler waters at depth. In contrast, Strong El Nino years lessen trade winds keeping warmer waters in the western Pacific and increase coastal upwelling further cooling eastern Pacific tropical waters (Quispe‐Calluari et al 2018). Albacore tuna (*Thunnus alalunga*) normally prefer temperate waters while Yellowfin Tuna (*Thunnus albacares*) prefer warmer waters (Colette and Nauen 1983), (Ellis 2008). The hypothesis is that with changes in oceanic conditions bought about by extreme El-Nino Southern Oscillation (ENSO), meaning strong El Nino or La Nina events, will bring a noticeable change in the distribution and abundances of these species across both tropic and temperate waters in the eastern Pacific. 
+
+## Data Sources and Methods
+
+|     All catch data for this project was obtianed from the Inter_American Tropical Tuna Commission website at https://www.iattc.org/PublicDomainData/IATTC-Catch-by-species1.htm. EL-Nono Southern Oscillation data was obtianed from the Golden gate Weather Service website at https://ggweather.com/enso/oni.htm. GGOceanMap data was downloaded from https://mikkovihtakari.github.io/drat", "https://cloud.r-project.org. Data was processed and graphed using R version 4.1.1 (2021-08-10). 
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=FALSE,warning=FALSE,message=FALSE)
+```
+```{r echo=FALSE}
+
+library(ggplot2)
+library(tidyverse)
+library(dplyr)
+library(ggpubr)
+library(ggmap)
+library(lubridate)
+library(data.table)
+library(ggrepel)
+library(ggOceanMaps)
+library(plotly)
+library(reshape2)
+library(ggOceanMapsData)
+library(moderndive)
+```
+```{r echo=FALSE}
+
+IATTCLL_Data_Raw<-read.csv('https://raw.githubusercontent.com/mmguanci/Final-Project/main/IATTCLL_Data_Raw.csv')
+LL<-IATTCLL_Data_Raw
+# This installs the required data for ggOceanMaps. A prompt from the CRAN package install leads to this site. 
+#install.packages("ggOceanMapsData", repos = c("https://mikkovihtakari.github.io/drat", "https://cloud.r-project.org"))
+```
+```{r echo=FALSE}
+
+# data is in calendar years (Jan-Dec). ENSO years go from (Jun-May). 
+# convert calendar years to ENSO years
+# Move ENSO column next to year to ensure this worked!
+LL<-LL %>%
+mutate(ENSO = if_else(Month >= 6, Year+1,Year+0))
+LL = LL %>% 
+ select(ENSO, everything()) 
+
+# Calculate CPUE by #fish /# of hooks
+
+# Also remove other unnecessary columns such as Year. 
+
+LL_CPUE <- subset(LL, select= -c(2,4,21:33))
+
+
+# Estimate Catch per unit of effort (CPUE) per species by dividing # of fish caught by # of hooks set.Additional species listed here for future work
+# ALB=Albacore, BET=Bigeye Tuna, BLM=Black Marlin, BUM=Blue Marlin, PBF=Pacific Bluefin Tuna, SKJ=Skipjack Tuna, SWO=Swordfish, YFT=Yellowfin Tuna
+
+LL_CPUE1<- LL_CPUE %>%
+mutate(ALBcpue = (ALBn/Hooks))%>%
+  mutate(BETcpue = (BETn/Hooks))%>%
+  mutate(BLMcpue = (BLMn/Hooks))%>%
+  mutate(BUMcpue = (BUMn/Hooks))%>%
+  mutate(PBFcpue = (PBFn/Hooks))%>%
+  mutate(SKJcpue = (SKJn/Hooks))%>%
+  mutate(SWOcpue = (SWOn/Hooks))%>%
+  mutate(YFTcpue = (YFTn/Hooks))
+```
+```{r echo=FALSE}
+
+# For Albacore
+# Calculate the mean CPUE across Latitude, Longitude, and Month
+LL_CPUE_ALB<-aggregate(LL_CPUE1$ALBcpue, by=list(LL_CPUE1$ENSO, LL_CPUE1$LatC5, LL_CPUE1$LonC5, LL_CPUE1$Month), FUN=mean) 
+colnames(LL_CPUE_ALB) <- c("ENSO", "Lat",  "Long",  "Month", "CPUE")
+```
+
+## Results
+
+```{r fig.width=9, fig.height=9}
+#Separate the ENSO Strong El Nino Years
+LL_CPUE_ALB_SEN <- LL_CPUE_ALB %>%
+  subset(ENSO %in% c("1958", "1966", "1973", "1983", "1988", "1992", "1998", "2016")) 
+
+# Calculate the mean CPUE for each 5x5 Lat/Long grid square across all Strong El Nino years, replace all inf and NaN values with 0
+LL_CPUE_ALB_SEN1<- aggregate(LL_CPUE_ALB_SEN$CPUE, by=list(LL_CPUE_ALB_SEN$Lat, LL_CPUE_ALB_SEN$Long), FUN=mean)
+colnames(LL_CPUE_ALB_SEN1) <- c("Lat",  "Long", "CPUE")
+LL_CPUE_ALB_SEN1[LL_CPUE_ALB_SEN1 =='Inf']<-0
+LL_CPUE_ALB_SENX<-replace(LL_CPUE_ALB_SEN1,is.na(LL_CPUE_ALB_SEN1),0)
+
+# multiply CPUE by 1000 to get a reasonable number
+
+LL_CPUE_ALB_SEN2<-LL_CPUE_ALB_SENX %>%
+  mutate(corrCPUE= (CPUE*1000))
+
+# Plot this using contours on basemap of the Eastern Pacific
+
+basemap(limits=c(-145,-70.5,-40,40))+
+  geom_contour(data=LL_CPUE_ALB_SEN2, aes(x = Long, y = Lat, z = corrCPUE, color=stat(level)))+
+  scale_colour_distiller(palette = "Spectral", direction = 1)+
+  labs(
+    title = "Albacore CPUE for Strong El Nino Years",
+    subtitle = "(1953-2021)",
+    x = "Longitude",
+    y = "Latitude",
+    colour = "CPUE per 1000 hooks")+
+  theme(plot.subtitle = element_text(hjust = 0.5))+
+  theme(plot.title = element_text(hjust = 0.5))
+
+ST_ALB_SEN <- lm(CPUE ~ Lat + Long, data = LL_CPUE_ALB_SEN2)
+pval_ST_ALB_SEN <- get_regression_summaries(ST_ALB_SEN) %>% pull(p_value)
+rval_ST_ALB_SEN<- get_regression_summaries(ST_ALB_SEN) %>% pull(r_squared)
+```
+
+***Figure 1:*** **Albacore CPUE for Strong El Nino Years:** 
+Albacore Catch per Unit of Effort (CPUE) data was averaged per 5 degree Latitude/5 degree Longitude grid square across all Strong El Nino years between 1953 and 2021 and plotted as a contour. Using CPUE as an indicator of abundance, this figure shows the Albacore being found primarily well south of the equatorial region. This is seemingly consistent with the hypothesis that these fish will avoid the warmer equatorial waters that strong El Nino years bring and congregate in cooler temperate waters. These abundances are also found well off the coast away from the lessened upwelling. However a multiple regression analysis between latitude, longitude, and CPUE shows a multiple r squared of only `r rval_ST_ALB_SEN` and a P value of close to zero meaning only small correlation between geographic area and CPUE.  
+
+```{r fig.width=9, fig.height=9}
+# Same for Albacore in Strong La Nina years
+
+LL_CPUE_ALB_SLN <- LL_CPUE_ALB %>%
+  subset(ENSO %in% c("1974", "1976", "1989", "1999", "2000", "2008", "2011")) 
+
+LL_CPUE_ALB_SLN1<- aggregate(LL_CPUE_ALB_SLN$CPUE, by=list(LL_CPUE_ALB_SLN$Lat, LL_CPUE_ALB_SLN$Long), FUN=mean)
+colnames(LL_CPUE_ALB_SLN1) <- c("Lat",  "Long", "CPUE")
+LL_CPUE_ALB_SLN1[LL_CPUE_ALB_SLN1 =='Inf']<-0
+LL_CPUE_ALB_SLNX<-replace(LL_CPUE_ALB_SLN1,is.na(LL_CPUE_ALB_SLN1),0)
+
+LL_CPUE_ALB_SLN2<-LL_CPUE_ALB_SLNX %>%
+  mutate(corrCPUE= (CPUE*1000))
+
+basemap(limits=c(-145,-70.5,-35,40))+
+  geom_contour(data=LL_CPUE_ALB_SLN2, aes(x = Long, y = Lat, z = corrCPUE, color=stat(level)))+
+  scale_colour_distiller(palette = "Spectral", direction = 1)+
+  labs(
+    title = "Albacore CPUE for Strong La Nina Years",
+    subtitle = "(1953-2021)",
+    x = "Longitude",
+    y = "Latitude",
+    colour = "CPUE per 1000 hooks")+
+  theme(plot.subtitle = element_text(hjust = 0.5))+
+  theme(plot.title = element_text(hjust = 0.5))
+
+ST_ALB_SLN <- lm(CPUE ~ Lat + Long, data = LL_CPUE_ALB_SLN2)
+pval_ST_ALB_SLN <- get_regression_summaries(ST_ALB_SLN) %>% pull(p_value)
+rval_ST_ALB_SLN<- get_regression_summaries(ST_ALB_SLN) %>% pull(r_squared)
+```
+
+***Figure 2:*** **Albacore CPUE for Strong La Nina Years:** 
+Albacore Catch per Unit of Effort (CPUE) data was averaged per 5 degree Latitude/5 degree Longitude grid square across all Strong La Nina years between 1953 and 2021 and plotted as a contour. This figure shows the Albacore being found closer to equatorial regions. This is again consistent with the hypothesis that the cooler tropical waters resulting from increased upwelling and lessening trade winds resulting from strong La Nina phenomena will bring Albacore to lower latitudes. Again, a multiple regression analysis between latitude, longitude, and CPUE shows a multiple r squared of only `r rval_ST_ALB_SLN` and a P value of `r pval_ST_ALB_SLN` meaning very little correlation between geographic area and CPUE.  
+
+``` {r fig.width=9, fig.height=9}
+#IN order to compare extreme ENSO events to a normal year, below is averaged CPUE for weak El Nino Years. 
+
+LL_CPUE_ALB_WEN <- LL_CPUE_ALB %>%
+  subset(ENSO %in% c("1953", "1954", "1959", "1970", "1977", "1978", "1980", "2005", "2007", "2015", "2019")) 
+
+LL_CPUE_ALB_WEN1<- aggregate(LL_CPUE_ALB_WEN$CPUE, by=list(LL_CPUE_ALB_WEN$Lat, LL_CPUE_ALB_WEN$Long), FUN=mean)
+colnames(LL_CPUE_ALB_WEN1) <- c("Lat",  "Long", "CPUE")
+LL_CPUE_ALB_WEN1[LL_CPUE_ALB_WEN1 =='Inf']<-0
+LL_CPUE_ALB_WENX<-replace(LL_CPUE_ALB_WEN1,is.na(LL_CPUE_ALB_WEN1),0)
+
+LL_CPUE_ALB_WEN2<-LL_CPUE_ALB_WENX %>%
+  mutate(corrCPUE= (CPUE*1000))
+
+basemap(limits=c(-145,-70.5,-35,40))+
+  geom_contour(data=LL_CPUE_ALB_WEN2, aes(x = Long, y = Lat, z = corrCPUE, color=stat(level)))+
+  scale_colour_distiller(palette = "Spectral", direction = 1)+
+  labs(
+    title = "Albacore CPUE for Weak El Nino Years",
+    subtitle = "(1953-2021)",
+    x = "Longitude",
+    y = "Latitude",
+    colour = "CPUE per 1000 hooks")+
+  theme(plot.subtitle = element_text(hjust = 0.5))+
+  theme(plot.title = element_text(hjust = 0.5))
+
+ST_ALB_WEN <- lm(CPUE ~ Lat + Long, data = LL_CPUE_ALB_WEN2)
+pval_ST_ALB_WEN <- get_regression_summaries(ST_ALB_WEN) %>% pull(p_value)
+rval_ST_ALB_WEN<- get_regression_summaries(ST_ALB_WEN) %>% pull(r_squared)
+```
+
+***Figure 3:*** **Albacore CPUE for Strong La Nina Years:** 
+To compare strong ENSO event years to more normal years, Albacore CPUE for weak El Nino years was averaged and plotted as contours in the Eastern Pacific. Weak El Nino was chosen due to the slight intensities of these events creating conditions approximating a balance between the El Nino/La Nina extremes plotted in Figures 1 and 2. This figure shows the Albacore being more normally distributed in the temperate waters North and South of the equator close to upwelling regions with slightly smaller abundances than strong La Nina years. Multiple regression analysis between latitude, longitude, and CPUE shows a multiple r squared of `r rval_ST_ALB_WEN` and a P value of `r pval_ST_ALB_WEN` meaning small correlation between geographic area and CPUE. However stronger than either r squared value drawn from strong the ENSO events.   
+
+``` {r fig.width=9, fig.height=9}
+# For Yellowfin Strong El Nino
+
+LL_CPUE_YFT<-aggregate(LL_CPUE1$YFTcpue, by=list(LL_CPUE1$ENSO, LL_CPUE1$LatC5, LL_CPUE1$LonC5, LL_CPUE1$Month), FUN=mean) 
+colnames(LL_CPUE_YFT) <- c("ENSO", "Lat",  "Long",  "Month", "CPUE")
+
+#Separate the ENSO Strong El Nino Years
+LL_CPUE_YFT_SEN <- LL_CPUE_YFT %>%
+  subset(ENSO %in% c("1958", "1966", "1973", "1983", "1988", "1992", "1998", "2016")) 
+
+# Calculate the mean CPUE for each 5x5 Lat/Long grid square across all Strong El Nino years, replace inf values with 0
+LL_CPUE_YFT_SEN1<- aggregate(LL_CPUE_YFT_SEN$CPUE, by=list(LL_CPUE_YFT_SEN$Lat, LL_CPUE_YFT_SEN$Long), FUN=mean)
+colnames(LL_CPUE_YFT_SEN1) <- c("Lat",  "Long", "CPUE")
+LL_CPUE_YFT_SEN1[LL_CPUE_YFT_SEN1 =='Inf']<-0
+LL_CPUE_YFT_SENX<-replace(LL_CPUE_YFT_SEN1,is.na(LL_CPUE_YFT_SEN1),0)
+
+# multiply CPUE by 1000 to get a reasonable number
+
+LL_CPUE_YFT_SEN2<-LL_CPUE_YFT_SENX %>%
+  mutate(corrCPUE= (CPUE*1000))
+
+# Plot this using contours
+
+basemap(limits=c(-145,-70.5,-40,30))+
+  geom_contour(data=LL_CPUE_YFT_SEN2, aes(x = Long, y = Lat, z = corrCPUE, color=stat(level)))+
+  scale_colour_distiller(palette = "Spectral", direction = 1)+
+  labs(
+    title = "Yellowfin CPUE for Strong El Nino Years",
+    subtitle = "(1953-2021)",
+    x = "Longitude",
+    y = "Latitude",
+    colour = "CPUE per 1000 hooks")+
+  theme(plot.subtitle = element_text(hjust = 0.5))+
+  theme(plot.title = element_text(hjust = 0.5))
+
+ST_YFT_SEN <- lm(CPUE ~ Lat + Long, data = LL_CPUE_YFT_SEN2)
+pval_ST_YFT_SEN <- get_regression_summaries(ST_YFT_SEN) %>% pull(p_value)
+rval_ST_YFT_SEN<- get_regression_summaries(ST_YFT_SEN) %>% pull(r_squared)
+```
+
+***Figure 4:*** **Yellowfin CPUE for Strong La Nina Years:** 
+As with Albacore, Yellowfin CPUE for strong El Nino years was averaged and plotted as contours in the east Pacific. For these averaged years, Yellowfin show a strong concentrations in topical waters possibly coinciding whit the warmer waters resulting from strong El Nino events. There is also a noted concentration off the coast of Peru, a famous upwelling zone. Given the expected lessening of upwelling in response to the increased stratification this is interesting. It is unclear whether this is a result of decreased competition for prey items or another factor. Multiple regression analysis between latitude, longitude, and CPUE shows a multiple r squared of `r rval_ST_YFT_SEN` and a P value of `r pval_ST_YFT_SEN` shows almost no correlation between geographic position and CPUE. This is likely a result of the overall wide distribution of this species across latitudes and longitudes during this figure's focal years.   
+
+``` {r fig.width=9, fig.height=9}
+# For Yellowfin Strong La Nina
+
+LL_CPUE_YFT_SLN <- LL_CPUE_YFT %>%
+  subset(ENSO %in% c("1974", "1976", "1989", "1999", "2000", "2008", "2011")) 
+ 
+
+LL_CPUE_YFT_SLN1<- aggregate(LL_CPUE_YFT_SLN$CPUE, by=list(LL_CPUE_YFT_SLN$Lat, LL_CPUE_YFT_SLN$Long), FUN=mean)
+colnames(LL_CPUE_YFT_SLN1) <- c("Lat",  "Long", "CPUE")
+LL_CPUE_YFT_SLN1[LL_CPUE_YFT_SLN1 =='Inf']<-0
+LL_CPUE_YFT_SLNX<-replace(LL_CPUE_YFT_SLN1,is.na(LL_CPUE_YFT_SLN1),0)
+
+LL_CPUE_YFT_SLN2<-LL_CPUE_YFT_SLNX %>%
+  mutate(corrCPUE= (CPUE*1000))
+
+basemap(limits=c(-145,-70.5,-40,30))+
+  geom_contour(data=LL_CPUE_YFT_SLN2, aes(x = Long, y = Lat, z = corrCPUE, color=stat(level)))+
+  scale_colour_distiller(palette = "Spectral", direction = 1)+
+  labs(
+    title = "Yellowfin CPUE for Strong La Nina Years",
+    subtitle = "(1953-2021)",
+    x = "Longitude",
+    y = "Latitude",
+    colour = "CPUE per 1000 hooks")+
+  theme(plot.subtitle = element_text(hjust = 0.5))+
+  theme(plot.title = element_text(hjust = 0.5))
+
+ST_YFT_SLN <- lm(CPUE ~ Lat + Long, data = LL_CPUE_YFT_SLN2)
+pval_ST_YFT_SLN <- get_regression_summaries(ST_YFT_SLN) %>% pull(p_value)
+rval_ST_YFT_SLN<- get_regression_summaries(ST_YFT_SLN) %>% pull(r_squared)
+```
+
+***Figure 5:*** **Yellowfin CPUE for Strong La Nina Years:** 
+This figure shows Yellowfin abundances during strong La Nina years. Here, there is a patchier distribution of Yellowfin with notably strong concentrations in or adjacent to coastal upwelling zones. These concentrations are situated further North and South than those found during strong El Nino years giving support to the hypothesis that these fish may be somewhat avoiding the La Nina driven cooler equatorial waters. Multiple regression analysis between latitude, longitude, and CPUE shows a multiple r squared of `r rval_ST_YFT_SLN` and a P value of `r pval_ST_YFT_SLN` again shows almost no correlation between geographic position and CPUE. This, again, may be a result of the overall wide distribution of this species across latitudes and longitudes during La Nina years.
+
+
+```{r fig.width=9, fig.height=9}
+# Yellowfin for weak El Nino (normal) years
+
+LL_CPUE_YFT_WEN <- LL_CPUE_YFT %>%
+  subset(ENSO %in% c("1953", "1954", "1959", "1970", "1977", "1978", "1980", "2005", "2007", "2015", "2019")) 
+
+LL_CPUE_YFT_WEN1<- aggregate(LL_CPUE_YFT_WEN$CPUE, by=list(LL_CPUE_YFT_WEN$Lat, LL_CPUE_YFT_WEN$Long), FUN=mean)
+colnames(LL_CPUE_YFT_WEN1) <- c("Lat",  "Long", "CPUE")
+LL_CPUE_YFT_WEN1[LL_CPUE_YFT_WEN1 =='Inf']<-0
+LL_CPUE_YFT_WENX<-replace(LL_CPUE_YFT_WEN1,is.na(LL_CPUE_YFT_WEN1),0)
+
+LL_CPUE_YFT_WEN2<-LL_CPUE_YFT_WENX %>%
+  mutate(corrCPUE= (CPUE*1000))
+
+basemap(limits=c(-145,-70.5,-35,40))+
+  geom_contour(data=LL_CPUE_YFT_WEN2, aes(x = Long, y = Lat, z = corrCPUE, color=stat(level)))+
+  scale_colour_distiller(palette = "Spectral", direction = 1)+
+  labs(
+    title = "Yellowfin CPUE for Weak El Nino Years",
+    subtitle = "(1953-2021)",
+    x = "Longitude",
+    y = "Latitude",
+    colour = "CPUE per 1000 hooks")+
+  theme(plot.subtitle = element_text(hjust = 0.5))+
+  theme(plot.title = element_text(hjust = 0.5))
+
+ST_YFT_WEN <- lm(CPUE ~ Lat + Long, data = LL_CPUE_YFT_WEN2)
+pval_ST_YFT_WEN <- get_regression_summaries(ST_YFT_WEN) %>% pull(p_value)
+rval_ST_YFT_WEN<- get_regression_summaries(ST_YFT_WEN) %>% pull(r_squared)
+```
+
+***Figure 6:*** **Yellowfin CPUE for Strong La Nina Years:** 
+To compare Yellowfin strong ENSO event years to more normal years, CPUE for weak El Nino years was also averaged for Yellowfin and plotted. As with Albacore, this figure shows Yellowfin being more normally distributed in their preferred habitat, the tropical waters North and South of the equator. Smaller abundances can likely be accounted by the wider distribution of these fish across the region. Multiple regression analysis between latitude, longitude, and CPUE shows a multiple r squared of `r rval_ST_YFT_WEN` and a P value of `r pval_ST_YFT_WEN` meaning small correlation between geographic area and CPUE. 
+
+\newpage
+
+**References**
+
+Collette, B. and Nauen C. (1983). FAO Species Catalogue. Vol. 2. Scombrids of the World. An Annotated and Illustrated Catalogue of Tunas, Mackerels, Bonitos and other Related Species known to date. FAO Fisheries Synopsis. Accessed 01Nov21 at: http://www.fao.org/3/ac478e/ac478e00.pd
+
+Ellis, R. (2008). Tuna. Love, Death, and Mercury. Vintage Books. 183-214.
+
+Golden Gate Weather Service (2022). El Nino and La Nina Years and Intensities. https://ggweather.com/enso/oni.htm. Accessed on 4/23/2022. 
+
+Inter-American Tropical Tuna Commission. (2022). IATTC - Public domain data files for download. https://www.iattc.org/PublicDomainData/IATTC-Catch-by-species1.htm. Accessed on 4/23/2022.
+
+Quispe-Calluari, Tam, J., Demarcq, H., Chamorro, A., Espinoza‐Morriberón, D., Romero, C., Dominguez, N., Ramos, J., & Oliveros‐Ramos, R. (2018). An index of coastal thermal effects of El Niño Southern Oscillation on the Peruvian Upwelling Ecosystem. International Journal of Climatology, 38(7), 3191–3201. https://doi.org/10.1002/joc.5493
